@@ -31,7 +31,13 @@ export TF_VAR_geoloader_image_tag="$APP_VERSION"
 # (works for both https://github.com/owner/name.git and git@github.com:owner/name.git).
 GITHUB_REPOSITORY="${GITHUB_REPOSITORY:-$(git -C "$REPO_ROOT" remote get-url origin \
   | sed -E 's#^(https://github\.com/|git@github\.com:)##; s#\.git$##')}"
-export TF_VAR_github_repository="$GITHUB_REPOSITORY"
+
+# How GitHub names this repository in OIDC tokens. Newer repositories use an
+# immutable form with numeric ids, so ask GitHub instead of assuming.
+GITHUB_OIDC_SUBJECT_PREFIX="${GITHUB_OIDC_SUBJECT_PREFIX:-$(gh api \
+  "repos/$GITHUB_REPOSITORY/actions/oidc/customization/sub" --jq '.sub_claim_prefix // empty' \
+  2>/dev/null || true)}"
+export TF_VAR_github_oidc_subject_prefix="${GITHUB_OIDC_SUBJECT_PREFIX:-repo:$GITHUB_REPOSITORY}"
 
 github_oidc_provider_arn() {
   aws iam list-open-id-connect-providers \
