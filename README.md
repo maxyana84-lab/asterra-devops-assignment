@@ -102,6 +102,10 @@ Log events of the loader: `file_received`, `file_valid` or `file_rejected` (with
 | `./tests/load_test.sh <region>` | Sends traffic above the autoscaling threshold and watches a second MapServer task start | yes |
 | `./k8s/deploy-local.sh` | The stack on local Kubernetes, including network policies | no |
 
+The Kubernetes script creates a [kind](https://kind.sigs.k8s.io) cluster named `asterra`, publishes MapServer on `http://127.0.0.1:8088`, and checks eight things: PostGIS is enabled, the loader Job loaded the sample, the loader reached the GDAL service, MapServer answers, and four network-policy cases (the database and the GDAL service are closed to other namespaces; the database is closed to everything but the loader). Remove the cluster with `./k8s/deploy-local.sh --delete`.
+
+If another kind cluster is already running and `kube-proxy` crashes with "too many open files", raise the inotify limit first: `sudo sysctl fs.inotify.max_user_instances=512`.
+
 CI runs the first two plus linting (`ruff`, including its security rules), `terraform fmt` / `validate` and `shellcheck`.
 
 ## CI/CD
