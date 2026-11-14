@@ -1,0 +1,20 @@
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+# Real values stay local; terraform.tfvars.example is the committed template.
+terraform.tfvars
+*.auto.tfvars
+
+# Secrets and keys
+*.pem
+.env
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
