@@ -1,0 +1,8 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    { "type": "Feature", "properties": { "name": "ASTERRA office" }, "geometry": { "type": "Point", "coordinates": [34.9066, 32.1782] } },
+    { "type": "Feature", "properties": { "name": "Pump station" }, "geometry": { "type": "Point", "coordinates": [34.895, 32.165] } },
+    { "type": "Feature", "properties": { "name": "Reservoir" }, "geometry": { "type": "Point", "coordinates": [34.940, 32.195] } }
+  ]
+}

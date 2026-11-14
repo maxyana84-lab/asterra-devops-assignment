@@ -55,9 +55,50 @@ def log_events(capsys):
 def test_valid_file_is_loaded_and_logged(loaded, capsys):
     result = h.handler(s3_event("in/valid.geojson"))
 
-    assert result == {"results": [{"key": "in/valid.geojson", "status": "loaded", "rows": 3}]}
+    assert result == {
+        "results": [{"key": "in/valid.geojson", "status": "loaded", "rows": 3, "stats": None}]
+    }
     assert loaded == [("in/valid.geojson", 3)]
     assert log_events(capsys) == ["file_received", "file_valid", "file_loaded"]
+
+
+class FakeResponse(io.BytesIO):
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+def test_loaded_file_is_measured_by_the_gdal_service(loaded, monkeypatch, capsys):
+    requests = []
+
+    def fake_urlopen(request, timeout):
+        requests.append((request.full_url, request.get_method(), len(request.data)))
+        return FakeResponse(json.dumps({"features": 3, "area_m2": 12.5}).encode())
+
+    monkeypatch.setattr(h, "GDAL_SERVICE_URL", "http://gdal.internal:8080")
+    monkeypatch.setattr(h.urllib.request, "urlopen", fake_urlopen)
+
+    result = h.handler(s3_event("in/valid.geojson"))
+
+    assert result["results"][0]["stats"] == {"features": 3, "area_m2": 12.5}
+    assert requests[0][:2] == ("http://gdal.internal:8080/stats", "POST")
+    assert log_events(capsys)[-1] == "file_stats"
+
+
+def test_gdal_service_outage_does_not_fail_the_load(loaded, monkeypatch, capsys):
+    def unreachable(request, timeout):
+        raise OSError("connection refused")
+
+    monkeypatch.setattr(h, "GDAL_SERVICE_URL", "http://gdal.internal:8080")
+    monkeypatch.setattr(h.urllib.request, "urlopen", unreachable)
+
+    result = h.handler(s3_event("in/valid.geojson"))
+
+    assert result["results"][0]["status"] == "loaded"
+    assert result["results"][0]["stats"] is None
+    assert log_events(capsys)[-1] == "stats_unavailable"
 
 
 def test_invalid_file_is_rejected_and_not_loaded(loaded, capsys):

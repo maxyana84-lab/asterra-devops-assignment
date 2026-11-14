@@ -14,6 +14,7 @@ import json
 import os
 import sys
 import time
+import urllib.request
 from functools import lru_cache
 from pathlib import Path
 from urllib.parse import unquote_plus
@@ -24,6 +25,9 @@ from . import db
 from .validation import GeoJSONError, parse_features
 
 MAX_FILE_BYTES = int(os.environ.get("MAX_FILE_BYTES", str(50 * 1024 * 1024)))
+# Optional private GDAL + GeoPandas service that measures each loaded file.
+GDAL_SERVICE_URL = os.environ.get("GDAL_SERVICE_URL", "").rstrip("/")
+GDAL_TIMEOUT_SECONDS = float(os.environ.get("GDAL_TIMEOUT_SECONDS", "15"))
 VERSION = (Path(__file__).parent.parent / "VERSION").read_text().strip()
 
 
@@ -91,7 +95,31 @@ def process_record(record: dict) -> dict:
 
     duration_ms = round((time.monotonic() - started) * 1000)
     log("file_loaded", bucket=bucket, key=key, rows=rows, duration_ms=duration_ms)
-    return {"key": key, "status": "loaded", "rows": rows}
+    return {"key": key, "status": "loaded", "rows": rows, "stats": measure(key, body)}
+
+
+def measure(key: str, body: bytes) -> dict | None:
+    """Ask the private GDAL service for the file's area, length and extent.
+
+    The data is already safely loaded at this point, so if the service is
+    unavailable this is logged and skipped rather than treated as a failure.
+    """
+    if not GDAL_SERVICE_URL:
+        return None
+    request = urllib.request.Request(  # noqa: S310 - the URL comes from deployment config
+        f"{GDAL_SERVICE_URL}/stats",
+        data=body,
+        method="POST",
+        headers={"Content-Type": "application/geo+json"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=GDAL_TIMEOUT_SECONDS) as response:  # noqa: S310
+            stats = json.load(response)
+    except Exception as exc:
+        log("stats_unavailable", key=key, error=repr(exc))
+        return None
+    log("file_stats", key=key, **stats)
+    return stats
 
 
 def _reject(bucket: str, key: str, reason: str) -> dict:

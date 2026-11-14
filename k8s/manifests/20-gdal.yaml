@@ -1,0 +1,46 @@
+# Private GDAL + GeoPandas microservice: ClusterIP only, never exposed outside.
+apiVersion: v1
+kind: Service
+metadata:
+  name: gdal
+  namespace: asterra
+spec:
+  selector:
+    app: gdal
+  ports:
+    - port: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gdal
+  namespace: asterra
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gdal
+  template:
+    metadata:
+      labels:
+        app: gdal
+    spec:
+      containers:
+        - name: gdal
+          image: asterra-gdal:local
+          imagePullPolicy: Never # loaded into the cluster by deploy-local.sh
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet: { path: /health, port: 8080 }
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /health, port: 8080 }
+            initialDelaySeconds: 20
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { memory: 1Gi }
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 999
+            allowPrivilegeEscalation: false

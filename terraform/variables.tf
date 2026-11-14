@@ -56,6 +56,92 @@ variable "endpoint_az_count" {
   default     = 1
 }
 
+variable "interface_endpoints" {
+  description = "AWS services the private subnets reach through interface endpoints (there is no NAT gateway)."
+  type        = list(string)
+  default     = ["secretsmanager", "ecr.api", "ecr.dkr", "logs"]
+}
+
+# ---------- Public access ----------
+
+variable "public_ingress_cidrs" {
+  description = "Address ranges allowed to reach the public MapServer."
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+}
+
+variable "public_port" {
+  description = "Port the public MapServer is served on."
+  type        = number
+  default     = 80
+}
+
+# ---------- Container services (ECS Fargate) ----------
+
+variable "service_image_tags" {
+  description = "Image tag of each service. Set by scripts/deploy.sh from services/<name>/VERSION."
+  type        = map(string)
+
+  validation {
+    condition     = toset(keys(var.service_image_tags)) == toset(["gdal", "mapserver"])
+    error_message = "Provide a tag for exactly these services: gdal, mapserver."
+  }
+}
+
+variable "service_container_port" {
+  description = "Port both service containers listen on."
+  type        = number
+  default     = 8080
+}
+
+variable "mapserver_cpu" {
+  description = "CPU units of one MapServer task (1024 = 1 vCPU)."
+  type        = number
+  default     = 256
+}
+
+variable "mapserver_memory_mb" {
+  description = "Memory of one MapServer task."
+  type        = number
+  default     = 512
+}
+
+variable "mapserver_min_tasks" {
+  description = "MapServer tasks running when traffic is low."
+  type        = number
+  default     = 1
+}
+
+variable "mapserver_max_tasks" {
+  description = "Upper limit for MapServer autoscaling."
+  type        = number
+  default     = 3
+}
+
+variable "mapserver_requests_per_task_per_minute" {
+  description = "Autoscaling threshold: above this many requests per task per minute, another task is started."
+  type        = number
+  default     = 300
+}
+
+variable "gdal_cpu" {
+  description = "CPU units of the GDAL task (1024 = 1 vCPU)."
+  type        = number
+  default     = 512
+}
+
+variable "gdal_memory_mb" {
+  description = "Memory of the GDAL task. Documents are processed in memory."
+  type        = number
+  default     = 1024
+}
+
+variable "gdal_task_count" {
+  description = "Number of GDAL tasks."
+  type        = number
+  default     = 1
+}
+
 # ---------- Ingest bucket ----------
 
 variable "ingest_file_suffix" {
@@ -68,6 +154,12 @@ variable "ingest_bucket_force_destroy" {
   description = "Allow destroying the ingest bucket while it still holds files. Keep true for a throwaway environment."
   type        = bool
   default     = true
+}
+
+variable "iam_propagation_delay" {
+  description = "Pause after granting S3 permission to invoke the loader, before S3 validates it."
+  type        = string
+  default     = "30s"
 }
 
 # ---------- GeoJSON loader (Lambda) ----------

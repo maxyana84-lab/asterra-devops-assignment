@@ -1,0 +1,95 @@
+MAP
+  NAME "asterra"
+  EXTENT 34.86 32.14 34.96 32.21
+  SIZE 800 560
+  IMAGETYPE PNG
+  IMAGECOLOR 245 247 250
+
+  PROJECTION
+    "init=epsg:4326"
+  END
+
+  WEB
+    METADATA
+      "ows_title"          "ASTERRA DevOps assignment - demo map"
+      "ows_abstract"       "Demo layers served by MapServer from GeoJSON through GDAL/OGR."
+      "ows_enable_request" "*"
+      "ows_srs"            "EPSG:4326 EPSG:3857"
+    END
+  END
+
+  LAYER
+    NAME "areas"
+    TYPE POLYGON
+    STATUS ON
+    CONNECTIONTYPE OGR
+    CONNECTION "/etc/mapserver/data/areas.geojson"
+    PROJECTION
+      "init=epsg:4326"
+    END
+    METADATA
+      "ows_title" "Survey areas"
+    END
+    CLASS
+      NAME "Survey area"
+      STYLE
+        COLOR 198 219 255
+        OUTLINECOLOR 28 70 160
+        WIDTH 2
+      END
+    END
+  END
+
+  LAYER
+    NAME "pipes"
+    TYPE LINE
+    STATUS ON
+    CONNECTIONTYPE OGR
+    CONNECTION "/etc/mapserver/data/pipes.geojson"
+    PROJECTION
+      "init=epsg:4326"
+    END
+    METADATA
+      "ows_title" "Pipe segments"
+    END
+    CLASS
+      NAME "Pipe"
+      STYLE
+        COLOR 200 60 40
+        WIDTH 3
+      END
+    END
+  END
+
+  LAYER
+    NAME "sites"
+    TYPE POINT
+    STATUS ON
+    CONNECTIONTYPE OGR
+    CONNECTION "/etc/mapserver/data/sites.geojson"
+    PROJECTION
+      "init=epsg:4326"
+    END
+    METADATA
+      "ows_title" "Sites"
+    END
+    CLASS
+      NAME "Site"
+      STYLE
+        SYMBOL "circle"
+        SIZE 12
+        COLOR 20 20 20
+        OUTLINECOLOR 255 255 255
+      END
+    END
+  END
+
+  SYMBOL
+    NAME "circle"
+    TYPE ELLIPSE
+    FILLED TRUE
+    POINTS
+      1 1
+    END
+  END
+END

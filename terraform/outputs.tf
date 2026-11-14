@@ -35,6 +35,43 @@ output "geoloader_version" {
   value = var.geoloader_image_tag
 }
 
+output "half_pager_url" {
+  description = "Public address of the half-pager."
+  value       = "https://${aws_s3_bucket.docs.bucket_regional_domain_name}/${aws_s3_object.half_pager.key}"
+}
+
+output "repository_urls" {
+  description = "ECR repository of every image, keyed by image name."
+  value       = { for name, repo in local.ecr_repositories : name => repo.repository_url }
+}
+
+output "public_ips" {
+  description = "Elastic IPs of the public MapServer."
+  value       = aws_eip.public[*].public_ip
+}
+
+output "mapserver_url" {
+  description = "WMS capabilities of the public MapServer."
+  value       = "http://${aws_eip.public[0].public_ip}${var.public_port == 80 ? "" : ":${var.public_port}"}${local.mapserver_health_path}"
+}
+
+output "gdal_service_url" {
+  description = "Address of the private GDAL service (resolves only inside the VPC)."
+  value       = local.gdal_service_url
+}
+
+output "ecs_cluster" {
+  value = aws_ecs_cluster.main.name
+}
+
+output "mapserver_service" {
+  value = aws_ecs_service.mapserver.name
+}
+
+output "gdal_log_group" {
+  value = aws_cloudwatch_log_group.service["gdal"].name
+}
+
 output "geoloader_repository_name" {
   value = aws_ecr_repository.geoloader.name
 }

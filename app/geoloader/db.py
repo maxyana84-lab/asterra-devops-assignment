@@ -36,7 +36,13 @@ VALUES (%s, %s, %s, ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326))
 
 @lru_cache(maxsize=1)
 def _credentials() -> dict:
-    """Read the database username and password from Secrets Manager (once per container)."""
+    """Database username and password (read once per container).
+
+    On AWS they come from Secrets Manager. Outside AWS (local Kubernetes) the
+    platform injects them as DB_USER / DB_PASSWORD from its own secret store.
+    """
+    if "DB_PASSWORD" in os.environ:
+        return {"username": os.environ["DB_USER"], "password": os.environ["DB_PASSWORD"]}
     client = boto3.client("secretsmanager")
     secret = client.get_secret_value(SecretId=os.environ["DB_SECRET_ARN"])
     return json.loads(secret["SecretString"])
@@ -50,7 +56,7 @@ def connect() -> psycopg.Connection:
         dbname=os.environ["DB_NAME"],
         user=creds["username"],
         password=creds["password"],
-        sslmode="require",
+        sslmode=os.environ.get("DB_SSLMODE", "require"),
         connect_timeout=10,
     )
 

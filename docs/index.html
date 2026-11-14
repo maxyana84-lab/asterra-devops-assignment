@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ASTERRA DevOps assignment - summary</title>
+<style>
+  :root { --ink:#1b2430; --muted:#5b6675; --line:#d5dbe3; --bg:#ffffff; --soft:#f4f6f9;
+          --pub:#fff4e0; --pubLine:#d9952b; --priv:#e9f1ff; --privLine:#3f6fd1; --ext:#eef0f3; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+         font:16px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  main { max-width:860px; margin:0 auto; padding:32px 20px 56px; }
+  h1 { font-size:1.6rem; margin:0 0 4px; }
+  h2 { font-size:1.1rem; margin:28px 0 8px; }
+  p { margin:0 0 12px; }
+  .sub { color:var(--muted); margin-bottom:24px; }
+  ul { margin:0 0 12px; padding-left:20px; }
+  li { margin-bottom:6px; }
+  code { background:var(--soft); padding:1px 5px; border-radius:4px; font-size:.92em; }
+  figure { margin:20px 0; overflow-x:auto; }
+  figcaption { color:var(--muted); font-size:.9rem; margin-top:6px; }
+  svg { min-width:720px; width:100%; height:auto; display:block; }
+  svg text { font:13px system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; fill:var(--ink); }
+  svg .small { font-size:11px; fill:var(--muted); }
+  svg .title { font-weight:600; }
+  table { border-collapse:collapse; width:100%; font-size:.95rem; }
+  th,td { text-align:left; padding:6px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+</style>
+</head>
+<body>
+<main>
+<h1>ASTERRA DevOps assignment</h1>
+<p class="sub">Maxim Shefter &middot; summary of the work, what did not work, and where to find everything</p>
+
+<h2>What I built</h2>
+<p>A small geospatial platform on AWS that one command creates in any region:
+<code>./scripts/deploy.sh &lt;region&gt;</code>. A GeoJSON file dropped into a private S3 bucket triggers a
+container Lambda that validates it and loads it into a private PostGIS database, logging every step to
+CloudWatch. A public MapServer runs on ECS Fargate behind Elastic IPs and scales on requests per minute.
+A private GDAL + GeoPandas microservice measures every loaded file. GitHub Actions tests, versions and
+deploys the loader on each merge to <code>main</code>. The same containers also run on a local Kubernetes cluster.</p>
+
+<h2>How I thought about it</h2>
+<ul>
+  <li><b>Private by default.</b> The public subnets contain one thing: a load balancer. Private subnets have
+      no internet route and no NAT gateway; they reach AWS APIs through VPC endpoints. Security groups
+      reference each other instead of address ranges wherever possible.</li>
+  <li><b>No secrets to leak.</b> RDS generates the database password and keeps it in Secrets Manager. It is not
+      in the code or the Terraform state. The pipeline signs in with OIDC, so GitHub holds no AWS keys.</li>
+  <li><b>Managed over hand-built.</b> Lambda for an event-driven job and Fargate for the two services mean no
+      servers to patch and nothing to SSH into.</li>
+  <li><b>Reproducible means tested.</b> The region is the script's only argument. A smoke test uploads real
+      files and checks the database, the logs, the map and the closed ports after every deployment.</li>
+  <li><b>Cost.</b> Free-plan credits shaped several choices: VPC endpoints instead of a NAT gateway,
+      single-AZ database, smallest task sizes. All of them are variables.</li>
+</ul>
+
+<h2>What did not work</h2>
+<ul>
+  <li><b>LocalStack.</b> RDS, ECR and container Lambdas are outside its free tier, and a local emulator cannot
+      prove a move between regions, so I used a real account.</li>
+  <li><b>First release failed at AWS sign-in.</b> GitHub now issues OIDC tokens for new repositories with an
+      immutable subject (<code>repo:owner@id/name@id</code>), so my role trust built from
+      <code>owner/name</code> never matched. The deploy script now asks GitHub for the exact subject. I also moved
+      the sign-in ahead of the version bump, because the failed run had used up a version number.</li>
+  <li><b>Static IP versus autoscaling.</b> An application load balancer can count requests but has no static IP;
+      a network load balancer has Elastic IPs but cannot count requests. I chained them: NLB in front, ALB behind.</li>
+  <li><b>Things that are global, not regional.</b> The GitHub OIDC provider exists once per account, so a second
+      region could not create it again. The script now owns it and removes it with the last region. IAM role
+      names carry the region for the same reason.</li>
+  <li><b>The second region found what the first one hid.</b> Moving from <code>eu-north-1</code> to
+      <code>eu-west-1</code> failed twice. S3 refused to attach the bucket notification because the Lambda
+      permission created a second earlier had not propagated yet - it had worked the first time by luck, so I
+      added an explicit wait. Then the destroy script could not empty the versioned IaC bucket: the list of
+      object versions was too long for a command line. After both fixes the new region passed all 13 smoke
+      checks and the old one was removed completely.</li>
+  <li><b>Terraform <code>moved</code> blocks</b> broke the targeted apply that creates the registries first; I renamed
+      the resources in state instead.</li>
+  <li><b>Smaller ones.</b> MapServer's image listens on port 80 as root and 8080 otherwise, found by testing the
+      image locally; shellcheck failed my first CI run; my first IaC upload included a Python virtual environment.</li>
+  <li><b>RDP.</b> I chose the non-interactive GDAL microservice over a GIS desktop, so there is no workspace to
+      open RDP to. I would rather state that than open a port to nothing.</li>
+</ul>
+
+<h2>Architecture</h2>
+<figure>
+<svg viewBox="0 0 860 430" role="img" aria-label="Architecture diagram">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#5b6675"/>
+    </marker>
+  </defs>
+  <g fill="none" stroke="#5b6675" stroke-width="1.4" marker-end="url(#a)">
+    <path d="M92 118H150"/><path d="M270 118H322"/><path d="M442 118H494"/>
+    <path d="M92 262H322"/><path d="M442 250H494"/><path d="M442 274C470 274 470 340 494 340"/>
+    <path d="M700 60V30H400V78" stroke-dasharray="4 3"/>
+    <path d="M745 232V180" stroke-dasharray="4 3"/>
+  </g>
+  <rect x="130" y="64" width="160" height="300" rx="10" fill="#fff4e0" stroke="#d9952b"/>
+  <text x="142" y="84" class="title">Public subnets</text>
+  <rect x="302" y="64" width="350" height="300" rx="10" fill="#e9f1ff" stroke="#3f6fd1"/>
+  <text x="314" y="84" class="title">Private subnets (no internet route)</text>
+
+  <g stroke="#9aa5b4" fill="#ffffff">
+    <rect x="12" y="96" width="80" height="44" rx="6" fill="#eef0f3"/>
+    <rect x="150" y="96" width="120" height="44" rx="6"/>
+    <rect x="322" y="96" width="120" height="44" rx="6"/>
+    <rect x="494" y="96" width="140" height="44" rx="6"/>
+    <rect x="12" y="240" width="80" height="44" rx="6" fill="#eef0f3"/>
+    <rect x="322" y="232" width="120" height="60" rx="6"/>
+    <rect x="494" y="228" width="140" height="44" rx="6"/>
+    <rect x="494" y="318" width="140" height="44" rx="6"/>
+    <rect x="322" y="160" width="312" height="40" rx="6" stroke-dasharray="4 3"/>
+    <rect x="672" y="60" width="176" height="120" rx="8" fill="#eef0f3"/>
+    <rect x="672" y="232" width="176" height="70" rx="8" fill="#eef0f3"/>
+  </g>
+
+  <text x="52" y="122" text-anchor="middle">Internet</text>
+  <text x="210" y="116" text-anchor="middle">Network LB</text>
+  <text x="210" y="132" text-anchor="middle" class="small">Elastic IPs, port 80</text>
+  <text x="382" y="116" text-anchor="middle">Application LB</text>
+  <text x="382" y="132" text-anchor="middle" class="small">counts requests</text>
+  <text x="564" y="116" text-anchor="middle">MapServer (Fargate)</text>
+  <text x="564" y="132" text-anchor="middle" class="small">1-3 tasks, autoscaled</text>
+  <text x="478" y="184" text-anchor="middle" class="small">VPC endpoints: S3, Secrets Manager, ECR, CloudWatch Logs</text>
+  <text x="52" y="258" text-anchor="middle">S3 ingest</text>
+  <text x="52" y="274" text-anchor="middle" class="small">*.geojson</text>
+  <text x="206" y="254" text-anchor="middle" class="small">object created</text>
+  <text x="382" y="256" text-anchor="middle">GeoJSON loader</text>
+  <text x="382" y="272" text-anchor="middle" class="small">Lambda container</text>
+  <text x="564" y="246" text-anchor="middle">RDS PostgreSQL</text>
+  <text x="564" y="262" text-anchor="middle" class="small">PostGIS, encrypted</text>
+  <text x="564" y="336" text-anchor="middle">GDAL + GeoPandas</text>
+  <text x="564" y="352" text-anchor="middle" class="small">Fargate, private DNS</text>
+  <text x="760" y="82" text-anchor="middle" class="title">GitHub Actions</text>
+  <text x="760" y="102" text-anchor="middle" class="small">CI on pull requests</text>
+  <text x="760" y="118" text-anchor="middle" class="small">release on merge to main</text>
+  <text x="760" y="134" text-anchor="middle" class="small">OIDC role, no stored keys</text>
+  <text x="760" y="150" text-anchor="middle" class="small">bump, push, deploy, verify,</text>
+  <text x="760" y="166" text-anchor="middle" class="small">roll back on failure</text>
+  <text x="760" y="254" text-anchor="middle" class="title">ECR</text>
+  <text x="760" y="272" text-anchor="middle" class="small">3 repositories,</text>
+  <text x="760" y="288" text-anchor="middle" class="small">immutable version tags</text>
+  <text x="430" y="400" text-anchor="middle" class="small">One VPC, two availability zones. Everything above is created by scripts/deploy.sh &lt;region&gt;.</text>
+</svg>
+<figcaption>Solid arrows: data flow. Dashed: deployment.</figcaption>
+</figure>
+
+<h2>Where things are</h2>
+<table>
+  <tr><th>Repository</th><td><a href="https://github.com/maxyana84-lab/asterra-devops-assignment">github.com/maxyana84-lab/asterra-devops-assignment</a> (private; access on request)</td></tr>
+  <tr><th>Documentation</th><td><code>README.md</code> - requirement-by-requirement table, how to deploy, test and use</td></tr>
+  <tr><th>Infrastructure</th><td><code>terraform/</code>, <code>scripts/deploy.sh</code>, <code>scripts/destroy.sh</code></td></tr>
+  <tr><th>Applications</th><td><code>app/</code> (loader), <code>services/gdal</code>, <code>services/mapserver</code></td></tr>
+  <tr><th>Tests</th><td>unit tests, image tests, an end-to-end smoke test, an autoscaling load test</td></tr>
+  <tr><th>Pipelines</th><td><code>.github/workflows/ci.yml</code>, <code>release.yml</code></td></tr>
+  <tr><th>Kubernetes</th><td><code>k8s/</code> - kind cluster, manifests, network policies, test script</td></tr>
+</table>
+
+<h2>What I would do next</h2>
+<p>HTTPS on the public endpoint with a real domain; a dedicated least-privilege database role for the loader;
+MapServer layers served from the PostGIS table; Terraform plan as a pull-request check.</p>
+</main>
+</body>
+</html>
