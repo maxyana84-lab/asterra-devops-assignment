@@ -1,0 +1,48 @@
+# The GeoJSON loader. On AWS it is a Lambda triggered by S3; a local cluster has
+# no S3 events, so the same image runs as a Job that loads the sample file
+# (ConfigMap "geojson-samples", created by deploy-local.sh from app/samples).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: geoloader
+  namespace: asterra
+spec:
+  backoffLimit: 4
+  template:
+    metadata:
+      labels:
+        app: geoloader
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: geoloader
+          image: asterra-geoloader:local
+          imagePullPolicy: Never
+          # The image is a Lambda image; run the CLI instead of the Lambda runtime.
+          command: ["python", "-m", "geoloader.cli", "/data/valid.geojson"]
+          workingDir: /var/task
+          env:
+            - name: DB_HOST
+              value: postgis
+            - name: DB_NAME
+              value: geodata
+            - name: DB_SSLMODE
+              value: prefer
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef: { name: postgis-credentials, key: username }
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: postgis-credentials, key: password }
+            - name: GDAL_SERVICE_URL
+              value: http://gdal:8080
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { memory: 512Mi }
+          volumeMounts:
+            - name: samples
+              mountPath: /data
+      volumes:
+        - name: samples
+          configMap:
+            name: geojson-samples

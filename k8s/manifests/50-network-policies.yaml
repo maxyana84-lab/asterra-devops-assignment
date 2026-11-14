@@ -1,0 +1,54 @@
+# The same rules as the AWS security groups:
+#   - nothing is reachable unless a rule allows it;
+#   - the database accepts only the loader;
+#   - the GDAL service accepts only workloads of this namespace (the "VPC");
+#   - MapServer is the one public service.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: asterra
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgis-from-geoloader
+  namespace: asterra
+spec:
+  podSelector:
+    matchLabels: { app: postgis }
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: { app: geoloader }
+      ports:
+        - port: 5432
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: gdal-from-namespace
+  namespace: asterra
+spec:
+  podSelector:
+    matchLabels: { app: gdal }
+  ingress:
+    - from:
+        - podSelector: {}
+      ports:
+        - port: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mapserver-public
+  namespace: asterra
+spec:
+  podSelector:
+    matchLabels: { app: mapserver }
+  ingress:
+    - ports:
+        - port: 8080
