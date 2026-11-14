@@ -49,9 +49,17 @@ jobs:
         env:
           TF_VAR_aws_region: eu-north-1
           TF_VAR_geoloader_image_tag: ci
+          TF_VAR_service_image_tags: '{"gdal":"ci","mapserver":"ci"}'
           TF_VAR_github_oidc_subject_prefix: repo:${{ github.repository }}
       - name: Shell scripts
         run: shellcheck -x scripts/*.sh tests/*.sh
+
+  services:
+    name: Services - build and test MapServer and GDAL images
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./tests/services_test.sh
 
   image:
     name: Image - build
