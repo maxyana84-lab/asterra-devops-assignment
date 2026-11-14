@@ -1,0 +1,21 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "name": "Main pipe" },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [[34.870, 32.155], [34.895, 32.165], [34.910, 32.182], [34.940, 32.195]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Branch pipe" },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [[34.910, 32.182], [34.925, 32.160]]
+      }
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "name": "Survey area north" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[34.885, 32.175], [34.935, 32.175], [34.935, 32.200], [34.885, 32.200], [34.885, 32.175]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Survey area south" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[34.875, 32.150], [34.915, 32.150], [34.915, 32.170], [34.875, 32.170], [34.875, 32.150]]]
+      }
+    }
+  ]
+}
