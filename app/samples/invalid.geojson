@@ -1,0 +1,13 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "name": "Open ring" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[34.89, 32.16], [34.93, 32.16], [34.93, 32.19], [34.89, 32.19]]]
+      }
+    }
+  ]
+}

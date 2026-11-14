@@ -1,0 +1,124 @@
+name: Release
+
+# Runs when a development branch is merged into main:
+# checks -> bump version -> build and publish the image -> deploy -> verify.
+on:
+  push:
+    branches: [main]
+
+# One release at a time; a second merge waits for the first to finish.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    uses: ./.github/workflows/ci.yml
+
+  release:
+    name: Bump version, publish and deploy
+    needs: checks
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # push the version bump and the tag
+      id-token: write # sign in to AWS with OIDC, no stored keys
+    env:
+      # Set by scripts/deploy.sh, so the pipeline follows the environment to a new region.
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+      LAMBDA_FUNCTION: ${{ vars.LAMBDA_FUNCTION }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Increment the version
+        id: version
+        env:
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          # Patch by default; put "#minor" or "#major" in the merge commit message for a bigger bump.
+          IFS=. read -r major minor patch < app/VERSION
+          case "$COMMIT_MESSAGE" in
+            *"#major"*) major=$((major + 1)); minor=0; patch=0 ;;
+            *"#minor"*) minor=$((minor + 1)); patch=0 ;;
+            *)          patch=$((patch + 1)) ;;
+          esac
+          version="$major.$minor.$patch"
+          echo "$version" > app/VERSION
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Releasing $version" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Commit and tag the version
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          AUTHOR_NAME: ${{ github.event.head_commit.author.name }}
+          AUTHOR_EMAIL: ${{ github.event.head_commit.author.email }}
+        run: |
+          # The bump is recorded under the name of whoever merged.
+          git config user.name "$AUTHOR_NAME"
+          git config user.email "$AUTHOR_EMAIL"
+          git commit -m "Release $VERSION" app/VERSION
+          git tag "v$VERSION"
+          # Pushes made with the workflow token do not start another workflow run.
+          git push origin HEAD:main "v$VERSION"
+
+      - name: Sign in to AWS (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Sign in to ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and publish the image
+        id: image
+        env:
+          IMAGE: ${{ steps.ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY }}:${{ steps.version.outputs.version }}
+        run: |
+          docker build --platform linux/amd64 --provenance=false -t "$IMAGE" app
+          docker push "$IMAGE"
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy to Lambda
+        env:
+          IMAGE: ${{ steps.image.outputs.image }}
+        id: deploy
+        run: |
+          previous="$(aws lambda get-function --function-name "$LAMBDA_FUNCTION" \
+            --query 'Code.ImageUri' --output text)"
+          echo "previous=$previous" >> "$GITHUB_OUTPUT"
+          aws lambda update-function-code --function-name "$LAMBDA_FUNCTION" \
+            --image-uri "$IMAGE" --query 'CodeSha256' --output text
+          aws lambda wait function-updated-v2 --function-name "$LAMBDA_FUNCTION"
+
+      - name: Verify the deployed version
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          # init_db is idempotent: it applies the schema and proves the new code
+          # starts, reads its secret and reaches the database.
+          aws lambda invoke --function-name "$LAMBDA_FUNCTION" \
+            --cli-binary-format raw-in-base64-out \
+            --payload '{"action":"init_db"}' response.json
+          cat response.json; echo
+          python3 - "$VERSION" <<'PY'
+          import json, sys
+          response = json.load(open("response.json"))
+          assert response.get("status") == "ok", f"health check failed: {response}"
+          assert response.get("version") == sys.argv[1], f"wrong version is running: {response}"
+          print("Running version", response["version"], "with PostGIS", response["postgis_version"])
+          PY
+
+      - name: Roll back if verification failed
+        if: failure() && steps.deploy.outputs.previous != ''
+        env:
+          PREVIOUS: ${{ steps.deploy.outputs.previous }}
+        run: |
+          echo "::error::Rolling back to $PREVIOUS"
+          aws lambda update-function-code --function-name "$LAMBDA_FUNCTION" \
+            --image-uri "$PREVIOUS" --query 'CodeSha256' --output text
+          aws lambda wait function-updated-v2 --function-name "$LAMBDA_FUNCTION"

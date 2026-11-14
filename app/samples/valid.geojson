@@ -1,0 +1,26 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "name": "ASTERRA office", "kind": "point" },
+      "geometry": { "type": "Point", "coordinates": [34.9066, 32.1782] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Pipe segment", "kind": "line" },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [[34.90, 32.17], [34.91, 32.18], [34.92, 32.18]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Survey area", "kind": "polygon" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[34.89, 32.16], [34.93, 32.16], [34.93, 32.19], [34.89, 32.19], [34.89, 32.16]]]
+      }
+    }
+  ]
+}

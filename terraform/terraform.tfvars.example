@@ -1,0 +1,9 @@
+# Copy to terraform.tfvars to override defaults. The region is NOT set here:
+# it is the argument of scripts/deploy.sh.
+
+# project              = "asterra"
+# vpc_cidr             = "10.20.0.0/16"
+# az_count             = 2
+# db_instance_class    = "db.t4g.micro"
+# db_engine_version    = "17"
+# db_allocated_storage = 20
