@@ -68,6 +68,12 @@ deploys the loader on each merge to <code>main</code>. The same containers also 
   <li><b>Things that are global, not regional.</b> The GitHub OIDC provider exists once per account, so a second
       region could not create it again. The script now owns it and removes it with the last region. IAM role
       names carry the region for the same reason.</li>
+  <li><b>The second region found what the first one hid.</b> Moving from <code>eu-north-1</code> to
+      <code>eu-west-1</code> failed twice. S3 refused to attach the bucket notification because the Lambda
+      permission created a second earlier had not propagated yet - it had worked the first time by luck, so I
+      added an explicit wait. Then the destroy script could not empty the versioned IaC bucket: the list of
+      object versions was too long for a command line. After both fixes the new region passed all 13 smoke
+      checks and the old one was removed completely.</li>
   <li><b>Terraform <code>moved</code> blocks</b> broke the targeted apply that creates the registries first; I renamed
       the resources in state instead.</li>
   <li><b>Smaller ones.</b> MapServer's image listens on port 80 as root and 8080 otherwise, found by testing the
