@@ -11,13 +11,17 @@ variable "project" {
 
 # ---------- CI/CD ----------
 
-variable "github_repository" {
-  description = "GitHub repository (owner/name) whose release pipeline may deploy. Set by scripts/deploy.sh from the git remote."
+variable "github_oidc_subject_prefix" {
+  description = <<-EOT
+    How GitHub identifies the repository in its OIDC tokens. Set by scripts/deploy.sh,
+    which asks GitHub: it is "repo:owner/name" for older repositories and
+    "repo:owner@<id>/name@<id>" for repositories with immutable subjects.
+  EOT
   type        = string
 
   validation {
-    condition     = can(regex("^[^/]+/[^/]+$", var.github_repository))
-    error_message = "Use the form owner/name."
+    condition     = can(regex("^repo:[^/:]+/[^/:]+$", var.github_oidc_subject_prefix))
+    error_message = "Use the form repo:owner/name or repo:owner@id/name@id."
   }
 }
 

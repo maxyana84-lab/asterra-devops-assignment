@@ -33,6 +33,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Sign in before touching the version: if AWS access is broken,
+      # the release stops here and no version number is used up.
+      - name: Sign in to AWS (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Sign in to ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
       - name: Increment the version
         id: version
         env:
@@ -63,16 +75,6 @@ jobs:
           git tag "v$VERSION"
           # Pushes made with the workflow token do not start another workflow run.
           git push origin HEAD:main "v$VERSION"
-
-      - name: Sign in to AWS (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
-          aws-region: ${{ vars.AWS_REGION }}
-
-      - name: Sign in to ECR
-        id: ecr
-        uses: aws-actions/amazon-ecr-login@v2
 
       - name: Build and publish the image
         id: image
