@@ -108,9 +108,14 @@ resource "aws_vpc_security_group_ingress_rule" "endpoints_from_vpc" {
   to_port           = 443
 }
 
-resource "aws_vpc_endpoint" "secretsmanager" {
+# Interface endpoints give the private subnets the few AWS APIs they need
+# (database password, image pulls, logs) with no NAT gateway and no route to
+# the internet at all.
+resource "aws_vpc_endpoint" "interface" {
+  for_each = toset(var.interface_endpoints)
+
   vpc_id              = aws_vpc.main.id
-  service_name        = "com.amazonaws.${var.aws_region}.secretsmanager"
+  service_name        = "com.amazonaws.${var.aws_region}.${each.value}"
   vpc_endpoint_type   = "Interface"
   private_dns_enabled = true
   security_group_ids  = [aws_security_group.endpoints.id]
@@ -118,5 +123,5 @@ resource "aws_vpc_endpoint" "secretsmanager" {
   # the whole VPC; raise endpoint_az_count for resilience to an AZ outage.
   subnet_ids = slice(aws_subnet.private[*].id, 0, var.endpoint_az_count)
 
-  tags = { Name = "${var.project}-secretsmanager-endpoint" }
+  tags = { Name = "${var.project}-${replace(each.value, ".", "-")}-endpoint" }
 }

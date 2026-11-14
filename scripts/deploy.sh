@@ -34,24 +34,38 @@ if [[ "$(github_oidc_provider_arn)" == "None" ]]; then
     --client-id-list sts.amazonaws.com >/dev/null
 fi
 
-# 2. Image registry first: the Lambda function cannot be created before its image exists.
+# 2. Image registries first: a function or service cannot be created before its image exists.
 tf_init
 terraform -chdir="$TF_DIR" apply -input=false -auto-approve \
-  -target=aws_ecr_repository.geoloader
+  -target=aws_ecr_repository.geoloader -target=aws_ecr_repository.service
 
-# 3. Build and publish the loader image, tagged with the version in app/VERSION.
-REPO_URL="$(terraform -chdir="$TF_DIR" output -raw geoloader_repository_url)"
-if aws ecr describe-images --repository-name "${REPO_URL#*/}" \
-     --image-ids "imageTag=$APP_VERSION" >/dev/null 2>&1; then
-  echo "==> Image $APP_VERSION is already published; bump app/VERSION to publish a new one"
-else
-  echo "==> Building and pushing $REPO_URL:$APP_VERSION"
-  aws ecr get-login-password | docker login --username AWS --password-stdin "${REPO_URL%%/*}"
+# 3. Build and publish the images. Tags are version numbers and are immutable,
+#    so an already published version is skipped.
+repo_url() { # repo_url <image name>
+  terraform -chdir="$TF_DIR" output -json repository_urls \
+    | python3 -c 'import json,sys; print(json.load(sys.stdin)[sys.argv[1]])' "$1"
+}
+
+publish_image() { # publish_image <image name> <build context> <version>
+  local name="$1" context="$2" version="$3" url
+  url="$(repo_url "$name")"
+  if aws ecr describe-images --repository-name "${url#*/}" \
+       --image-ids "imageTag=$version" >/dev/null 2>&1; then
+    echo "==> $name $version is already published; bump its VERSION file to publish a new one"
+    return
+  fi
+  echo "==> Building and pushing $url:$version"
+  aws ecr get-login-password | docker login --username AWS --password-stdin "${url%%/*}"
   # --provenance=false: Lambda accepts a plain image manifest, not an OCI index.
   docker build --platform linux/amd64 --provenance=false \
-    -t "$REPO_URL:$APP_VERSION" "$REPO_ROOT/app"
-  docker push "$REPO_URL:$APP_VERSION"
-fi
+    --build-arg "SERVICE_VERSION=$version" -t "$url:$version" "$context"
+  docker push "$url:$version"
+}
+
+publish_image geoloader "$REPO_ROOT/app" "$APP_VERSION"
+for service in "${SERVICES[@]}"; do
+  publish_image "$service" "$REPO_ROOT/services/$service" "$(service_version "$service")"
+done
 
 # 4. Everything else.
 terraform -chdir="$TF_DIR" apply -input=false -auto-approve

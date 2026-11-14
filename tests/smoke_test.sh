@@ -74,6 +74,39 @@ else
   fail "ingest bucket refuses anonymous access"
 fi
 
+# ---------- Private GDAL + GeoPandas service ----------
+# It has no public address, so it is tested through its only client: the loader
+# calls it after each load and logs what it returned.
+stats_logged() {
+  aws logs filter-log-events --log-group-name "$LOG_GROUP" --start-time "$START_MS" \
+    --filter-pattern "{ \$.event = \"file_stats\" && \$.key = \"$VALID_KEY\" && \$.area_m2 > 1000000 && \$.gdal_driver = \"GeoJSON\" }" \
+    --query 'length(events)' --output text | grep -qvE '^(0|None)$'
+}
+wait_for "private GDAL service measured the file (area and length logged)" stats_logged
+
+# ---------- Public MapServer on the Elastic IPs ----------
+WMS="SERVICE=WMS&VERSION=1.3.0"
+GETMAP="$WMS&REQUEST=GetMap&LAYERS=areas,pipes,sites&STYLES=&CRS=CRS:84&BBOX=34.86,32.14,34.96,32.21&WIDTH=800&HEIGHT=560&FORMAT=image/png"
+PUBLIC_IPS="$(terraform -chdir="$TF_DIR" output -json public_ips | python3 -c 'import json,sys; print(" ".join(json.load(sys.stdin)))')"
+GDAL_PORT="$(out gdal_service_url | sed -E 's#.*:([0-9]+)$#\1#')"
+
+for ip in $PUBLIC_IPS; do
+  caps_ok() { curl -s --max-time 10 "http://$ip/?$WMS&REQUEST=GetCapabilities" | grep -q "<Name>areas</Name>"; }
+  wait_for "MapServer on Elastic IP $ip: WMS capabilities list the layers" caps_ok
+
+  if [[ "$(curl -s --max-time 15 -o /dev/null -w '%{content_type}' "http://$ip/?$GETMAP")" == image/png* ]]; then
+    pass "MapServer on Elastic IP $ip: GetMap renders a PNG"
+  else
+    fail "MapServer on Elastic IP $ip: GetMap renders a PNG"
+  fi
+
+  if curl -s --max-time 5 -o /dev/null "http://$ip:$GDAL_PORT/health"; then
+    fail "container port $GDAL_PORT is closed on public address $ip"
+  else
+    pass "container port $GDAL_PORT is closed on public address $ip"
+  fi
+done
+
 aws s3 rm --only-show-errors --recursive "s3://$BUCKET/$RUN_ID/"
 
 if [[ "$FAILED" == "0" ]]; then echo "==> All checks passed"; else echo "==> Some checks FAILED"; exit 1; fi

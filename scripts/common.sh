@@ -27,6 +27,14 @@ export TF_VAR_project="$PROJECT"
 APP_VERSION="$(tr -d '[:space:]' < "$REPO_ROOT/app/VERSION")"
 export TF_VAR_geoloader_image_tag="$APP_VERSION"
 
+# Each service image has its own version file: services/<name>/VERSION.
+# shellcheck disable=SC2034 # used by deploy.sh, which sources this file
+SERVICES=(gdal mapserver)
+service_version() { tr -d '[:space:]' < "$REPO_ROOT/services/$1/VERSION"; }
+TF_VAR_service_image_tags="$(printf '{"gdal":"%s","mapserver":"%s"}' \
+  "$(service_version gdal)" "$(service_version mapserver)")"
+export TF_VAR_service_image_tags
+
 # owner/name of the GitHub repository, taken from the git remote
 # (works for both https://github.com/owner/name.git and git@github.com:owner/name.git).
 GITHUB_REPOSITORY="${GITHUB_REPOSITORY:-$(git -C "$REPO_ROOT" remote get-url origin \

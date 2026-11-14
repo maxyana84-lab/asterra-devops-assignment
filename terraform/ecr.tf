@@ -15,8 +15,36 @@ resource "aws_ecr_repository" "geoloader" {
   tags = { Name = "${var.project}-geoloader" }
 }
 
-resource "aws_ecr_lifecycle_policy" "geoloader" {
-  repository = aws_ecr_repository.geoloader.name
+# Images of the two long-running services (MapServer, GDAL + GeoPandas).
+resource "aws_ecr_repository" "service" {
+  for_each = toset(keys(var.service_image_tags))
+
+  name                 = "${var.project}-${each.key}"
+  image_tag_mutability = "IMMUTABLE"
+  force_delete         = var.ecr_force_delete
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  encryption_configuration {
+    encryption_type = "AES256"
+  }
+
+  tags = { Name = "${var.project}-${each.key}" }
+}
+
+locals {
+  ecr_repositories = merge(
+    { geoloader = aws_ecr_repository.geoloader },
+    aws_ecr_repository.service,
+  )
+}
+
+resource "aws_ecr_lifecycle_policy" "all" {
+  for_each = local.ecr_repositories
+
+  repository = each.value.name
 
   policy = jsonencode({
     rules = [{

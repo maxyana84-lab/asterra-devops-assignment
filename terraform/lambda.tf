@@ -102,6 +102,15 @@ resource "aws_vpc_security_group_egress_rule" "geoloader_to_s3" {
   to_port           = 443
 }
 
+resource "aws_vpc_security_group_egress_rule" "geoloader_to_gdal" {
+  security_group_id            = aws_security_group.geoloader.id
+  description                  = "HTTP to the private GDAL service"
+  referenced_security_group_id = aws_security_group.service["gdal"].id
+  ip_protocol                  = "tcp"
+  from_port                    = var.service_container_port
+  to_port                      = var.service_container_port
+}
+
 # ---------- The function ----------
 
 resource "aws_cloudwatch_log_group" "geoloader" {
@@ -132,6 +141,8 @@ resource "aws_lambda_function" "geoloader" {
       DB_NAME        = aws_db_instance.main.db_name
       DB_SECRET_ARN  = aws_db_instance.main.master_user_secret[0].secret_arn
       MAX_FILE_BYTES = tostring(var.geoloader_max_file_mb * 1024 * 1024)
+      # The private GDAL service computes area and length of each loaded file.
+      GDAL_SERVICE_URL = local.gdal_service_url
     }
   }
 
@@ -142,7 +153,7 @@ resource "aws_lambda_function" "geoloader" {
 
   tags = { Name = local.geoloader_name, Version = var.geoloader_image_tag }
 
-  depends_on = [aws_iam_role_policy.geoloader, aws_vpc_endpoint.secretsmanager]
+  depends_on = [aws_iam_role_policy.geoloader, aws_vpc_endpoint.interface]
 }
 
 resource "aws_lambda_permission" "s3_invoke_geoloader" {
