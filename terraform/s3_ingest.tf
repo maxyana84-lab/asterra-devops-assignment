@@ -64,6 +64,16 @@ data "aws_iam_policy_document" "ingest_tls_only" {
   }
 }
 
+# S3 validates the notification target when the notification is created, and a
+# freshly created Lambda permission takes a few seconds to become visible to it.
+# Without this pause a deployment into a new region fails intermittently with
+# "Unable to validate the following destination configurations".
+resource "time_sleep" "lambda_permission_propagation" {
+  create_duration = var.iam_propagation_delay
+
+  depends_on = [aws_lambda_permission.s3_invoke_geoloader]
+}
+
 # Every new *.geojson object triggers the loader.
 resource "aws_s3_bucket_notification" "ingest" {
   bucket = aws_s3_bucket.ingest.id
@@ -74,5 +84,5 @@ resource "aws_s3_bucket_notification" "ingest" {
     filter_suffix       = var.ingest_file_suffix
   }
 
-  depends_on = [aws_lambda_permission.s3_invoke_geoloader]
+  depends_on = [time_sleep.lambda_permission_propagation]
 }

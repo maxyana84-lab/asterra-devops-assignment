@@ -18,7 +18,7 @@ terraform -chdir="$TF_DIR" destroy -input=false -auto-approve
 # The bucket is versioned, so every object version has to go before the bucket can.
 echo "==> Emptying and deleting $STATE_BUCKET"
 python3 - "$STATE_BUCKET" "$REGION" <<'PY'
-import json, subprocess, sys
+import json, subprocess, sys, tempfile
 
 bucket, region = sys.argv[1], sys.argv[2]
 while True:
@@ -31,10 +31,14 @@ while True:
                for o in (data.get("Versions") or []) + (data.get("DeleteMarkers") or [])]
     if not objects:
         break
-    subprocess.run(
-        ["aws", "s3api", "delete-objects", "--bucket", bucket, "--region", region,
-         "--delete", json.dumps({"Objects": objects, "Quiet": True})],
-        check=True, stdout=subprocess.DEVNULL)
+    # The list goes through a file: hundreds of long keys do not fit on a command line.
+    with tempfile.NamedTemporaryFile("w", suffix=".json") as batch:
+        json.dump({"Objects": objects, "Quiet": True}, batch)
+        batch.flush()
+        subprocess.run(
+            ["aws", "s3api", "delete-objects", "--bucket", bucket, "--region", region,
+             "--delete", f"file://{batch.name}"],
+            check=True, stdout=subprocess.DEVNULL)
 PY
 aws s3api delete-bucket --bucket "$STATE_BUCKET"
 

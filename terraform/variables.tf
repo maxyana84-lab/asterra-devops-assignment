@@ -156,6 +156,12 @@ variable "ingest_bucket_force_destroy" {
   default     = true
 }
 
+variable "iam_propagation_delay" {
+  description = "Pause after granting S3 permission to invoke the loader, before S3 validates it."
+  type        = string
+  default     = "30s"
+}
+
 # ---------- GeoJSON loader (Lambda) ----------
 
 variable "geoloader_image_tag" {
