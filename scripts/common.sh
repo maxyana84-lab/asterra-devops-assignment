@@ -33,7 +33,6 @@ GITHUB_REPOSITORY="${GITHUB_REPOSITORY:-$(git -C "$REPO_ROOT" remote get-url ori
   | sed -E 's#^(https://github\.com/|git@github\.com:)##; s#\.git$##')}"
 export TF_VAR_github_repository="$GITHUB_REPOSITORY"
 
-GITHUB_OIDC_URL="https://token.actions.githubusercontent.com"
 github_oidc_provider_arn() {
   aws iam list-open-id-connect-providers \
     --query "OpenIDConnectProviderList[?ends_with(Arn, '/token.actions.githubusercontent.com')].Arn | [0]" \

@@ -2,6 +2,7 @@
 # Removes the whole environment from one AWS region, including the IaC bucket.
 #   ./scripts/destroy.sh eu-north-1
 
+# shellcheck source-path=SCRIPTDIR source=common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
 echo "==> Destroying '$PROJECT' in $REGION (account $ACCOUNT_ID)"

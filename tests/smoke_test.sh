@@ -4,6 +4,7 @@
 # Uploads one valid and one invalid GeoJSON file and checks that the valid one
 # reaches the PostGIS table, the invalid one is rejected, and both are logged.
 
+# shellcheck source-path=SCRIPTDIR source=../scripts/common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/../scripts/common.sh"
 
 tf_init >/dev/null

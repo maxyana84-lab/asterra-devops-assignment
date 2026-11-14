@@ -3,6 +3,7 @@
 #   ./scripts/deploy.sh eu-north-1
 # Safe to re-run: every step is idempotent.
 
+# shellcheck source-path=SCRIPTDIR source=common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
 echo "==> Deploying '$PROJECT' to $REGION (account $ACCOUNT_ID)"
@@ -29,7 +30,7 @@ aws s3api put-bucket-encryption --bucket "$STATE_BUCKET" \
 # GitHub's OIDC identity provider is one-per-account, shared by all regions.
 if [[ "$(github_oidc_provider_arn)" == "None" ]]; then
   echo "==> Registering GitHub as an OIDC identity provider"
-  aws iam create-open-id-connect-provider --url "$GITHUB_OIDC_URL" \
+  aws iam create-open-id-connect-provider --url "https://token.actions.githubusercontent.com" \
     --client-id-list sts.amazonaws.com >/dev/null
 fi
 
