@@ -1,0 +1,65 @@
+name: CI
+
+# Runs on every pull request to main and every push to develop.
+# release.yml also calls it, so nothing is released without passing these checks.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [develop]
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  app:
+    name: App - lint and unit tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: app/requirements*.txt
+      - run: pip install -r requirements-dev.txt
+      - name: Lint (ruff, including security rules)
+        run: ruff check .
+      - name: Formatting
+        run: ruff format --check .
+      - name: Unit tests
+        run: pytest -q
+
+  infrastructure:
+    name: Infrastructure - Terraform and shell checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - name: Terraform formatting
+        run: terraform -chdir=terraform fmt -check -recursive
+      - name: Terraform validate
+        run: |
+          terraform -chdir=terraform init -backend=false -input=false
+          terraform -chdir=terraform validate
+        env:
+          TF_VAR_aws_region: eu-north-1
+          TF_VAR_geoloader_image_tag: ci
+          TF_VAR_github_repository: ${{ github.repository }}
+      - name: Shell scripts
+        run: shellcheck -x scripts/*.sh tests/*.sh
+
+  image:
+    name: Image - build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build --platform linux/amd64 --provenance=false -t geoloader:ci app
+      - name: The image starts and the handler imports
+        run: |
+          docker run --rm --entrypoint python geoloader:ci \
+            -c "from geoloader.handler import handler, VERSION; print('geoloader', VERSION)"
